@@ -11,7 +11,7 @@ class XqllBuffer(object):
         self.max = 0
         self.min = 0
         self.steps = 0
-        self.data = []
+        self.data = None
         self.dgxqCol = None
 
 

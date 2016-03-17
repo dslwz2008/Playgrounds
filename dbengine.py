@@ -180,12 +180,10 @@ def dgxq_data(year, month, day):
     dtStart = datetime.datetime(year, month, day, 0, 0, 0)
     #[start,end)
     dtEnd = datetime.datetime(year, month, day+1, 0, 0, 0)
-    strStart = dtStart.strftime('%Y/%m/%d %H:%M:%S')
-    strEnd = dtEnd.strftime('%Y/%m/%d %H:%M:%S')
     # QSSJ have been converted to datetime , not string in this collection
-    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lt':dtEnd}})\
-        .sort('QSSJ', pymongo.ASCENDING)
-    print(cursor.count())
+    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lt':dtEnd}},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1})
+        #.sort('QSSJ', pymongo.ASCENDING)
+    #print(cursor.count())
     df = pd.DataFrame(list(cursor))
     return df
 

@@ -6,6 +6,7 @@ import tornado.options
 import json
 import numpy as np
 import pandas as pd
+import datetime
 from xqll import XqllBuffer
 from dbengine import *
 import os
@@ -94,26 +95,79 @@ class DgxqLocHandler(BaseHandler):
 
 class DgxqStatsHandler(BaseHandler):
     def get(self):
+        result={}
         try:
             year = int(self.get_argument('year',2015))
             month = int(self.get_argument('month',9))
             day = int(self.get_argument('day',21))
-            interval = float(self.get_argument('interval',1.0))
+            interval = int(self.get_argument('interval',60))
+
             # query DGXQ collection
             if XqllBuffer().dgxqCol is None:
                 XqllBuffer().dgxqCol = dgxq_all()
+            dgxqDf = dgxq_data(year,month,day)
+
+            # merge
+            merged = pd.merge(dgxqDf,XqllBuffer().dgxqCol,left_on='SBBH',right_on='SBDM')
+            merged.set_index(pd.DatetimeIndex(merged['QSSJ']),inplace=True)
+
+            # filter by time
+            delta = datetime.timedelta(minutes=interval)
+            dtStart = datetime.datetime(year, month, day, 0, 0, 0)
+            #[start,end)
+            dtEnd = datetime.datetime(year, month, day+1, 0, 0, 0)
+            dtTemp = dtStart + delta
+            steps = 1440/interval
+            XqllBuffer().data = [None] * steps
+            idx = 0
+            while dtTemp <= dtEnd:
+                filtered = merged.between_time(start_time=dtStart,end_time=dtTemp,
+                                               include_end=False)
+                grouped = filtered.groupby([filtered['SBMC'],filtered['SBDM'],filtered['FX']])
+                objArray = []
+                for (name,group) in grouped:
+                    obj={}
+                    #obj['id']='{0}_{1}_{2}'.format(name[0], name[1], name[2])
+                    obj['id']='%s_%s_%s' % (name[0],name[1],name[2])
+                    obj['zhll']=group['ZHLL'].mean()
+                    objArray.append(obj)
+                XqllBuffer().data[idx] = objArray
+                dtStart = dtTemp
+                dtTemp = dtStart + delta
+                idx += 1
+
+            # statistics
+            minll = merged['ZHLL'].min()
+            maxll = merged['ZHLL'].max()
+            result['max']=maxll
+            result['min']=minll
+            result['steps']=steps
+            result['success']=True
 
         except Exception, ex:
-            print('{0}'.format(ex.message))
+            print('ERROR: %s' % str(ex))
+            result['success']=False
+            result['message']='ERROR: %s' % str(ex)
         finally:
-            pass
-
-
+            self.set_header('Content-Type', 'application/json;charset:utf-8')
+            self.write(json.dumps(result))
 
 
 class DgxqGetDataHandler(BaseHandler):
     def get(self):
-        pass
+        result={}
+        try:
+            step = int(self.get_argument('step',1))
+            data = XqllBuffer().data[step]
+            result['success'] = True
+            result['data'] = data
+        except Exception, ex:
+            print('ERROR: %s' % str(ex))
+            result['success']=False
+            result['message']='ERROR: %s' % str(ex)
+        finally:
+            self.set_header('Content-Type', 'application/json;charset:utf-8')
+            self.write(json.dumps(result))
 
 
 application = tornado.web.Application([
