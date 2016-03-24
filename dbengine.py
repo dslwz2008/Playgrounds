@@ -181,12 +181,37 @@ def dgxq_data(year, month, day):
     #[start,end)
     dtEnd = datetime.datetime(year, month, day+1, 0, 0, 0)
     # QSSJ have been converted to datetime , not string in this collection
-    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lt':dtEnd}},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1})
+    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lt':dtEnd}},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1,'SBMC':1})
         #.sort('QSSJ', pymongo.ASCENDING)
     #print(cursor.count())
     df = pd.DataFrame(list(cursor))
     return df
 
+def dgxq_zhll_at(datetimeobj):
+    client = MongoClient(DBADRESS, DBPORT)
+    db = client['trafficn']
+    colName = 'DY50_XQ_SSSJ_LS'
+    dgxqCol = db[colName]
+
+    cursor = dgxqCol.find({'QSSJ':datetimeobj},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1, 'SBMC':1})\
+        .sort('QSSJ', pymongo.ASCENDING)
+    result = []
+    for item in cursor:
+        result.append(item)
+    return result
+
+def dgxq_zhll_between(startDt, endDt):
+    client = MongoClient(DBADRESS, DBPORT)
+    db = client['trafficn']
+    colName = 'DY50_XQ_SSSJ_LS'
+    dgxqCol = db[colName]
+
+    cursor = dgxqCol.find({'QSSJ':{'$gte':startDt, '$lt':endDt}},
+                          {'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1, 'SBMC':1})
+    result = []
+    for item in cursor:
+        result.append(item)
+    return result
 
 
 if __name__ == '__main__':

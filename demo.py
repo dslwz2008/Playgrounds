@@ -101,15 +101,15 @@ class DgxqStatsHandler(BaseHandler):
             month = int(self.get_argument('month',9))
             day = int(self.get_argument('day',21))
             interval = int(self.get_argument('interval',60))
-
-            # query DGXQ collection
-            if XqllBuffer().dgxqCol is None:
-                XqllBuffer().dgxqCol = dgxq_all()
+            #
+            # # query DGXQ collection
+            # if XqllBuffer().dgxqCol is None:
+            #     XqllBuffer().dgxqCol = dgxq_all()
             dgxqDf = dgxq_data(year,month,day)
 
             # merge
-            merged = pd.merge(dgxqDf,XqllBuffer().dgxqCol,left_on='SBBH',right_on='SBDM')
-            merged.set_index(pd.DatetimeIndex(merged['QSSJ']),inplace=True)
+            # merged = pd.merge(dgxqDf,XqllBuffer().dgxqCol,left_on='SBBH',right_on='SBDM')
+            dgxqDf.set_index(pd.DatetimeIndex(dgxqDf['QSSJ']),inplace=True)
 
             # filter by time
             delta = datetime.timedelta(minutes=interval)
@@ -121,9 +121,9 @@ class DgxqStatsHandler(BaseHandler):
             XqllBuffer().data = [None] * steps
             idx = 0
             while dtTemp <= dtEnd:
-                filtered = merged.between_time(start_time=dtStart,end_time=dtTemp,
+                filtered = dgxqDf.between_time(start_time=dtStart,end_time=dtTemp,
                                                include_end=False)
-                grouped = filtered.groupby([filtered['SBMC'],filtered['SBDM'],filtered['FX']])
+                grouped = filtered.groupby([filtered['SBMC'],filtered['SBBH'],filtered['FX']])
                 objArray = []
                 for (name,group) in grouped:
                     obj={}
@@ -137,8 +137,8 @@ class DgxqStatsHandler(BaseHandler):
                 idx += 1
 
             # statistics
-            minll = merged['ZHLL'].min()
-            maxll = merged['ZHLL'].max()
+            minll = dgxqDf['ZHLL'].min()
+            maxll = dgxqDf['ZHLL'].max()
             result['max']=maxll
             result['min']=minll
             result['steps']=steps
@@ -158,7 +158,7 @@ class DgxqGetDataHandler(BaseHandler):
         result={}
         try:
             step = int(self.get_argument('step',1))
-            data = XqllBuffer().data[step]
+            data = XqllBuffer().data[step-1]
             result['success'] = True
             result['data'] = data
         except Exception, ex:
@@ -170,7 +170,71 @@ class DgxqGetDataHandler(BaseHandler):
             self.write(json.dumps(result))
 
 
+class DgxqZHLLAtTimeHandler(BaseHandler):
+    def get(self, *args, **kwargs):
+        result = {}
+        try:
+            # default is 2015.7.1(1438358400000)
+            millisec = int(self.get_argument('time',1438358400000/1000))/1000
+            dt = datetime.datetime.fromtimestamp(millisec)
+            objArr = []
+            for doc in dgxq_zhll_at(dt):
+                obj={}
+                obj['id']='%s_%s_%s' % (doc['SBMC'],doc['SBBH'],doc['FX'])
+                obj['zhll']=doc['ZHLL']
+                objArr.append(obj)
+            result['success'] = True
+            result['data'] = objArr
+        except Exception, ex:
+            print('ERROR: %s' % str(ex))
+            result['success']=False
+            result['message']='ERROR: %s' % str(ex)
+        finally:
+            self.set_header('Content-Type', 'application/json;charset:utf-8')
+            self.write(json.dumps(result))
+
+class DgxqZHLLBetweenTimeHandler(BaseHandler):
+    def get(self, *args, **kwargs):
+        result = {}
+        try:
+            # default is 2015.7.1 08:05:00 (1435709100000)
+            # to 2015.7.1 08:10:00 (1435709400000)
+            startms = int(self.get_argument('start',1435709100000/1000))/1000
+            endms = int(self.get_argument('end',1435709400000/1000))/1000
+            startDt = datetime.datetime.fromtimestamp(startms)
+            endDt = datetime.datetime.fromtimestamp(endms)
+            style = int(self.get_argument('style',0))
+            datalist = dgxq_zhll_between(startDt, endDt)
+            objArr = []
+            # raw data
+            if style == 0:
+                for doc in datalist:
+                    obj={}
+                    obj['id']='%s_%s_%s' % (doc['SBMC'],doc['SBBH'],doc['FX'])
+                    obj['zhll']=doc['ZHLL']
+                    objArr.append(obj)
+            else:
+                df = pd.DataFrame(datalist)
+                grouped = df.groupby([df['SBMC'],df['SBBH'],df['FX']])
+                for (name,group) in grouped:
+                    obj={}
+                    obj['id']='%s_%s_%s' % (name[0],name[1],name[2])
+                    obj['zhll']=group['ZHLL'].mean()
+                    objArr.append(obj)
+            result['success'] = True
+            result['data'] = objArr
+        except Exception, ex:
+            print('ERROR: %s' % str(ex))
+            result['success']=False
+            result['message']='ERROR: %s' % str(ex)
+        finally:
+            self.set_header('Content-Type', 'application/json;charset:utf-8')
+            self.write(json.dumps(result))
+
+
 application = tornado.web.Application([
+    (r"^/dgxq/zhllbetween$", DgxqZHLLBetweenTimeHandler),
+    (r"^/dgxq/zhllat$", DgxqZHLLAtTimeHandler),
     (r"^/dgxq/stats$", DgxqStatsHandler),
     (r"^/dgxq/getdata$", DgxqGetDataHandler),
     (r"^/getcphm$", GetCPHMHandler),
