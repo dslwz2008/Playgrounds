@@ -181,7 +181,7 @@ def dgxq_data(year, month, day):
     #[start,end)
     dtEnd = datetime.datetime(year, month, day+1, 0, 0, 0)
     # QSSJ have been converted to datetime , not string in this collection
-    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lt':dtEnd}},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1,'SBMC':1})
+    cursor = dgxqCol.find({'QSSJ':{'$gte':dtStart, '$lte':dtEnd}},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1,'SBMC':1})
         #.sort('QSSJ', pymongo.ASCENDING)
     #print(cursor.count())
     df = pd.DataFrame(list(cursor))
@@ -196,9 +196,15 @@ def dgxq_zhll_at(datetimeobj):
     cursor = dgxqCol.find({'QSSJ':datetimeobj},{'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1, 'SBMC':1})\
         .sort('QSSJ', pymongo.ASCENDING)
     result = []
+    min = 10000
+    max = 0
     for item in cursor:
+        if item['ZHLL'] < min:
+            min = item['ZHLL']
+        if item['ZHLL'] > max:
+            max = item['ZHLL']
         result.append(item)
-    return result
+    return result, min, max
 
 def dgxq_zhll_between(startDt, endDt):
     client = MongoClient(DBADRESS, DBPORT)
@@ -209,9 +215,15 @@ def dgxq_zhll_between(startDt, endDt):
     cursor = dgxqCol.find({'QSSJ':{'$gte':startDt, '$lt':endDt}},
                           {'_id':0,'SBBH':1,'FX':1,'ZHLL':1,'QSSJ':1, 'SBMC':1})
     result = []
+    min = 10000
+    max = 0
     for item in cursor:
+        if item['ZHLL'] < min:
+            min = item['ZHLL']
+        if item['ZHLL'] > max:
+            max = item['ZHLL']
         result.append(item)
-    return result
+    return result, min, max
 
 
 if __name__ == '__main__':

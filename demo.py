@@ -120,9 +120,15 @@ class DgxqStatsHandler(BaseHandler):
             steps = 1440/interval
             XqllBuffer().data = [None] * steps
             idx = 0
+            minll = 10000 # a big number
+            maxll = 0
             while dtTemp <= dtEnd:
-                filtered = dgxqDf.between_time(start_time=dtStart,end_time=dtTemp,
-                                               include_end=False)
+                # There is a bug in this function. The last step returns empty list.
+                # So I use the selector instead.
+                # filtered = dgxqDf.between_time(start_time=dtStart, end_time=dtTemp,
+                #                                include_start=True, include_end=False)
+                selector = (dgxqDf['QSSJ']>=dtStart) & (dgxqDf['QSSJ']<dtEnd)
+                filtered = dgxqDf[selector]
                 grouped = filtered.groupby([filtered['SBMC'],filtered['SBBH'],filtered['FX']])
                 objArray = []
                 for (name,group) in grouped:
@@ -130,15 +136,17 @@ class DgxqStatsHandler(BaseHandler):
                     #obj['id']='{0}_{1}_{2}'.format(name[0], name[1], name[2])
                     obj['id']='%s_%s_%s' % (name[0],name[1],name[2])
                     obj['zhll']=group['ZHLL'].mean()
+                    if obj['zhll'] > maxll:
+                        maxll = obj['zhll']
+                    if obj['zhll'] < minll:
+                        minll = obj['zhll']
                     objArray.append(obj)
                 XqllBuffer().data[idx] = objArray
                 dtStart = dtTemp
                 dtTemp = dtStart + delta
                 idx += 1
 
-            # statistics
-            minll = dgxqDf['ZHLL'].min()
-            maxll = dgxqDf['ZHLL'].max()
+            # result data
             result['max']=maxll
             result['min']=minll
             result['steps']=steps
@@ -178,13 +186,16 @@ class DgxqZHLLAtTimeHandler(BaseHandler):
             millisec = int(self.get_argument('time',1438358400000/1000))/1000
             dt = datetime.datetime.fromtimestamp(millisec)
             objArr = []
-            for doc in dgxq_zhll_at(dt):
+            docs, min, max = dgxq_zhll_at(dt)
+            for doc in docs:
                 obj={}
                 obj['id']='%s_%s_%s' % (doc['SBMC'],doc['SBBH'],doc['FX'])
                 obj['zhll']=doc['ZHLL']
                 objArr.append(obj)
             result['success'] = True
             result['data'] = objArr
+            result['min'] = min
+            result['max'] = max
         except Exception, ex:
             print('ERROR: %s' % str(ex))
             result['success']=False
@@ -204,7 +215,7 @@ class DgxqZHLLBetweenTimeHandler(BaseHandler):
             startDt = datetime.datetime.fromtimestamp(startms)
             endDt = datetime.datetime.fromtimestamp(endms)
             style = int(self.get_argument('style',0))
-            datalist = dgxq_zhll_between(startDt, endDt)
+            datalist, min, max = dgxq_zhll_between(startDt, endDt)
             objArr = []
             # raw data
             if style == 0:
@@ -223,6 +234,8 @@ class DgxqZHLLBetweenTimeHandler(BaseHandler):
                     objArr.append(obj)
             result['success'] = True
             result['data'] = objArr
+            result['min'] = min
+            result['max'] = max
         except Exception, ex:
             print('ERROR: %s' % str(ex))
             result['success']=False
